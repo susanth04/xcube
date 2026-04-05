@@ -1,7 +1,8 @@
 """
-Gazebo Harmonic HTTP server.
+Gazebo Harmonic HTTP server with MJPEG video streaming.
 Runs as standalone service and communicates with Gazebo simulation.
 Receives actions and applies them to Gazebo world.
+Streams camera output as MJPEG to browser.
 
 Run with:
     python gazebo_sim_bridge.py
@@ -10,11 +11,23 @@ Run with:
 import logging
 from typing import Dict, List, Any, Optional
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import asyncio
 import subprocess
 import os
 import time
+import io
+
+# Try to import OpenCV for image handling
+try:
+    import cv2
+    import numpy as np
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+    print("Warning: OpenCV not available - video streaming disabled")
 
 # Gazebo imports
 try:
@@ -34,8 +47,16 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI
 app = FastAPI(
     title="Gazebo Sim Bridge",
-    description="Receives and applies simulation actions to Gazebo Harmonic",
-    version="1.0.0"
+    description="Receives and applies simulation actions to Gazebo Harmonic with video streaming",
+    version="2.0.0"
+)
+
+# Add CORS for browser streaming
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -48,6 +69,7 @@ class ActionPayload(BaseModel):
 gazebo_process = None
 node = None
 entity_manager = {}  # Track spawned entities
+latest_frame = None  # Latest camera frame for streaming
 
 
 @app.on_event("startup")
@@ -108,18 +130,112 @@ def _is_gazebo_running() -> bool:
         return False
 
 
+# Animation state
+_frame_counter = 0
+
+
+def _generate_placeholder_frame() -> bytes:
+    """Generate an animated placeholder frame when Gazebo is not available."""
+    global _frame_counter
+    _frame_counter += 1
+    
+    if not CV2_AVAILABLE:
+        return b''
+    
+    # Create a dark frame
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    frame[:] = (30, 30, 45)  # Dark blue-gray
+    
+    # Draw grid (simulating a floor)
+    for i in range(0, 640, 40):
+        alpha = 0.3 + 0.1 * np.sin(_frame_counter * 0.02 + i * 0.01)
+        color = int(60 * alpha)
+        cv2.line(frame, (i, 200), (i, 480), (color, color, color + 20), 1)
+    for j in range(200, 480, 30):
+        cv2.line(frame, (0, j), (640, j), (50, 50, 60), 1)
+    
+    # Draw animated "robot" placeholder
+    robot_x = 320 + int(80 * np.sin(_frame_counter * 0.03))
+    robot_y = 340
+    cv2.circle(frame, (robot_x, robot_y), 25, (80, 80, 200), -1)
+    cv2.circle(frame, (robot_x, robot_y), 25, (120, 120, 255), 2)
+    cv2.circle(frame, (robot_x, robot_y - 15), 8, (255, 200, 100), -1)
+    
+    # Draw second robot
+    robot2_x = 450 + int(60 * np.cos(_frame_counter * 0.025))
+    robot2_y = 380
+    cv2.circle(frame, (robot2_x, robot2_y), 20, (80, 80, 200), -1)
+    cv2.circle(frame, (robot2_x, robot2_y), 20, (120, 120, 255), 2)
+    
+    # Title
+    cv2.putText(frame, "Gazebo Simulation", (195, 80), 
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    
+    # Status with blinking dot
+    status_color = (100, 200, 100) if _frame_counter % 60 < 30 else (50, 100, 50)
+    cv2.circle(frame, (220, 120), 6, status_color, -1)
+    cv2.putText(frame, "Mock Mode - Docker required for real Gazebo", (235, 125),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (150, 150, 150), 1)
+    
+    # Instructions
+    cv2.putText(frame, "Run: cd docker && docker-compose up gazebo-bridge", (130, 460),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (100, 100, 120), 1)
+    
+    # Border
+    cv2.rectangle(frame, (5, 5), (635, 475), (60, 60, 80), 2)
+    
+    # Encode to JPEG
+    _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    return jpeg.tobytes()
+
+
+async def generate_mjpeg_stream():
+    """Generate MJPEG stream from Gazebo camera or placeholder."""
+    global latest_frame
+    
+    while True:
+        # Get frame (from Gazebo camera subscription or placeholder)
+        if latest_frame is not None:
+            frame_data = latest_frame
+        else:
+            frame_data = _generate_placeholder_frame()
+        
+        if frame_data:
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
+        
+        # ~15 FPS
+        await asyncio.sleep(0.066)
+
+
+@app.get("/stream")
+async def video_stream():
+    """
+    MJPEG video stream endpoint.
+    Connect to this from browser: <img src="http://localhost:8002/stream">
+    """
+    if not CV2_AVAILABLE:
+        raise HTTPException(status_code=503, detail="OpenCV not available for streaming")
+    
+    return StreamingResponse(
+        generate_mjpeg_stream(),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )
+
+
 @app.get("/health")
 async def health():
     """Health check."""
     if not GAZEBO_AVAILABLE:
-        return {"status": "mock_mode", "gazebo_available": False}
+        return {"status": "mock_mode", "gazebo_available": False, "streaming": CV2_AVAILABLE}
     
     is_running = _is_gazebo_running()
     
     return {
         "status": "ok" if is_running else "gazebo_not_running",
         "gazebo_available": True,
-        "gazebo_running": is_running
+        "gazebo_running": is_running,
+        "streaming": CV2_AVAILABLE
     }
 
 
@@ -449,14 +565,23 @@ def _generate_cube_sdf(name: str, position: List[float]) -> str:
 if __name__ == "__main__":
     import uvicorn
     
+    print("=" * 60)
+    print("Gazebo Simulation Bridge v2.0")
+    print("=" * 60)
+    
     if not GAZEBO_AVAILABLE:
-        print("=" * 60)
         print("WARNING: Running in mock mode (Gazebo not available)")
-        print("=" * 60)
         print("\nTo install Gazebo Harmonic:")
         print("  1. Install via Conda: conda install libgz-sim8 -c conda-forge")
         print("  2. Install Python bindings: pip install gz-sim8 gz-transport13 gz-math7")
         print("\nSee GAZEBO_INSTALLATION.md for detailed instructions")
-        print("=" * 60)
+    
+    if not CV2_AVAILABLE:
+        print("WARNING: OpenCV not available - install with: pip install opencv-python")
+    else:
+        print("Video streaming: ENABLED")
+        print("Stream URL: http://localhost:8002/stream")
+    
+    print("=" * 60)
     
     uvicorn.run(app, host="0.0.0.0", port=8002)

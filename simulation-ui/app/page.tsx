@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import ChatPanel from '@/components/chat-panel'
 import StatePanel from '@/components/state-panel'
 import SessionPanel from '@/components/session-panel'
-import Scene3D from '@/components/scene-3d'
+import StreamViewer from '@/components/stream-viewer'
 
 interface Robot {
   position: [number, number, number]
@@ -82,18 +82,16 @@ export default function Dashboard() {
         <div className="flex items-center justify-between">
           <div className="flex items-baseline gap-3">
             <h1 className="text-2xl font-bold text-slate-900">Simulation</h1>
-            <p className="text-sm text-slate-500">Real-time 3D Environment</p>
+            <p className="text-sm text-slate-500">Gazebo Stream</p>
           </div>
           <div className="text-xs text-slate-400 font-mono" suppressHydrationWarning>{sessionId || 'loading...'}</div>
         </div>
 
         {/* Main Grid */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0">
-          {/* 3D Canvas */}
+          {/* Gazebo Stream */}
           <div className="rounded-lg bg-white border border-slate-200 shadow-sm overflow-hidden">
-            <div className="h-full w-full">
-              <Scene3D sceneState={sceneData} />
-            </div>
+            <StreamViewer streamUrl="http://localhost:8002/stream" />
           </div>
 
           {/* Chat Panel */}

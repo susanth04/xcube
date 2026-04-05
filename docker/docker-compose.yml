@@ -1,0 +1,38 @@
+services:
+  gazebo-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.gazebo
+    ports:
+      - "8002:8002"
+    environment:
+      - DISPLAY=:99
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    # If no NVIDIA GPU, comment out the deploy section above
+
+  # Your existing backend
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      - gazebo-bridge
+    environment:
+      - GAZEBO_BRIDGE_URL=http://gazebo-bridge:8002
+
+  # Frontend (optional - you can still run it locally)
+  # frontend:
+  #   build:
+  #     context: ../simulation-ui
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - backend

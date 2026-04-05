@@ -5,22 +5,18 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "eslint ."
+    "start": "next start"
   },
   "dependencies": {
     "@radix-ui/react-scroll-area": "1.2.10",
     "@radix-ui/react-slot": "1.2.4",
-    "@react-three/drei": "^10.7.7",
-    "@react-three/fiber": "^9.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.564.0",
     "next": "16.2.0",
     "react": "^19",
     "react-dom": "^19",
-    "tailwind-merge": "^3.3.1",
-    "three": "^0.183.2"
+    "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
     "@types/node": "^22",

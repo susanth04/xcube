@@ -2,9 +2,7 @@
 
 import { Canvas } from '@react-three/fiber'
 import { PerspectiveCamera, OrbitControls, Grid } from '@react-three/drei'
-import { useFrame } from '@react-three/fiber'
-import { useRef, useEffect, useState, Suspense } from 'react'
-import * as THREE from 'three'
+import { Suspense, useMemo } from 'react'
 
 interface Scene3DProps {
   sceneState?: {
@@ -14,110 +12,75 @@ interface Scene3DProps {
   }
 }
 
-function Robot({ id, position }: { id: string; position: [number, number, number] }) {
-  const groupRef = useRef<THREE.Group>(null)
-
-  useFrame(() => {
-    if (groupRef.current) {
-      groupRef.current.rotation.z += 0.01
-    }
-  })
-
+function Robot({ position }: { position: [number, number, number] }) {
   return (
-    <group ref={groupRef} position={position}>
-      {/* Main body - red sphere */}
+    <group position={position}>
       <mesh position={[0, 0, 0.4]}>
-        <sphereGeometry args={[0.4, 32, 32]} />
+        <sphereGeometry args={[0.4, 16, 16]} />
         <meshStandardMaterial color="#ff4444" />
       </mesh>
-
-      {/* Top indicator - gold sphere */}
       <mesh position={[0, 0, 0.8]}>
-        <sphereGeometry args={[0.15, 16, 16]} />
+        <sphereGeometry args={[0.15, 12, 12]} />
         <meshStandardMaterial color="#ffaa00" />
       </mesh>
-
-      {/* Wheels */}
       <mesh position={[-0.4, 0, 0.2]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.2, 0.2, 0.1, 16]} />
+        <cylinderGeometry args={[0.2, 0.2, 0.1, 12]} />
         <meshStandardMaterial color="#222222" />
       </mesh>
       <mesh position={[0.4, 0, 0.2]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.2, 0.2, 0.1, 16]} />
+        <cylinderGeometry args={[0.2, 0.2, 0.1, 12]} />
         <meshStandardMaterial color="#222222" />
       </mesh>
     </group>
   )
 }
 
-function SimObject({ id, position }: { id: string; position: [number, number, number] }) {
-  const meshRef = useRef<THREE.Mesh>(null)
-
-  useFrame(() => {
-    if (meshRef.current) {
-      meshRef.current.rotation.x += 0.005
-      meshRef.current.rotation.y += 0.007
-    }
-  })
-
+function SimObject({ position }: { position: [number, number, number] }) {
   return (
-    <mesh ref={meshRef} position={position}>
+    <mesh position={position}>
       <boxGeometry args={[0.8, 0.8, 0.8]} />
       <meshStandardMaterial color="#4488ff" />
     </mesh>
   )
 }
 
-function AxesHelper() {
-  return (
-    <group>
-      {/* X axis (red) */}
-      <mesh position={[2.5, 0, 0]}>
-        <boxGeometry args={[5, 0.1, 0.1]} />
-        <meshBasicMaterial color="#ff0000" />
-      </mesh>
-      {/* Y axis (green) */}
-      <mesh position={[0, 2.5, 0]}>
-        <boxGeometry args={[0.1, 5, 0.1]} />
-        <meshBasicMaterial color="#00ff00" />
-      </mesh>
-      {/* Z axis (blue) */}
-      <mesh position={[0, 0, 2.5]}>
-        <boxGeometry args={[0.1, 0.1, 5]} />
-        <meshBasicMaterial color="#0000ff" />
-      </mesh>
-    </group>
-  )
-}
-
 function SceneContent({ sceneState }: { sceneState?: Scene3DProps['sceneState'] }) {
+  const robots = useMemo(() => {
+    if (!sceneState?.robots) return []
+    return Object.entries(sceneState.robots)
+  }, [sceneState?.robots])
+
+  const objects = useMemo(() => {
+    if (!sceneState?.objects) return []
+    return Object.entries(sceneState.objects)
+  }, [sceneState?.objects])
+
   return (
     <>
-      {/* Lighting */}
       <ambientLight intensity={0.5} />
-      <directionalLight position={[20, 20, 20]} intensity={0.8} castShadow />
+      <directionalLight position={[20, 20, 20]} intensity={0.8} />
 
-      {/* Ground */}
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[50, 50]} />
         <meshStandardMaterial color="#2a2a4e" />
       </mesh>
 
-      {/* Grid and helpers */}
-      <Grid args={[50, 50]} cellSize={1} cellColor="#444466" sectionSize={5} sectionColor="#333355" fadeDistance={100} />
-      <AxesHelper />
+      <Grid 
+        args={[50, 50]} 
+        cellSize={1} 
+        cellColor="#444466" 
+        sectionSize={5} 
+        sectionColor="#333355" 
+        fadeDistance={50} 
+      />
 
-      {/* Robots */}
-      {sceneState?.robots &&
-        Object.entries(sceneState.robots).map(([id, data]) => (
-          <Robot key={id} id={id} position={data.position} />
-        ))}
+      {robots.map(([id, data]) => (
+        <Robot key={id} position={data.position} />
+      ))}
 
-      {/* Objects */}
-      {sceneState?.objects &&
-        Object.entries(sceneState.objects).map(([id, data]) => (
-          <SimObject key={id} id={id} position={data.position} />
-        ))}
+      {objects.map(([id, data]) => (
+        <SimObject key={id} position={data.position} />
+      ))}
     </>
   )
 }
@@ -125,11 +88,13 @@ function SceneContent({ sceneState }: { sceneState?: Scene3DProps['sceneState'] 
 export default function Scene3D({ sceneState }: Scene3DProps) {
   return (
     <div className="w-full h-full bg-slate-900 rounded-lg overflow-hidden">
-      <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-white">Loading 3D scene...</div>}>
-        <Canvas shadows>
+      <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-white text-sm">Loading...</div>}>
+        <Canvas 
+          frameloop="demand"
+          gl={{ antialias: false, powerPreference: 'low-power' }}
+        >
           <PerspectiveCamera makeDefault position={[10, 10, 10]} fov={75} />
           <color attach="background" args={['#1a1a2e']} />
-          <fog attach="fog" args={['#1a1a2e', 50, 100]} />
           <SceneContent sceneState={sceneState} />
           <OrbitControls />
         </Canvas>

@@ -8,16 +8,26 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        purple: {
-          50: '#faf5ff',
-          500: '#a855f7',
-          600: '#9333ea',
-          700: '#7e22ce',
+        border: 'hsl(220, 13%, 91%)',
+        input: 'hsl(220, 13%, 91%)',
+        ring: 'hsl(262, 83%, 58%)',
+        background: 'hsl(220, 14%, 96%)',
+        foreground: 'hsl(220, 9%, 14%)',
+        primary: {
+          DEFAULT: 'hsl(262, 83%, 58%)',
+          foreground: 'hsl(0, 0%, 100%)',
         },
-        indigo: {
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#4338ca',
+        secondary: {
+          DEFAULT: 'hsl(220, 13%, 91%)',
+          foreground: 'hsl(220, 9%, 14%)',
+        },
+        muted: {
+          DEFAULT: 'hsl(220, 13%, 91%)',
+          foreground: 'hsl(220, 9%, 46%)',
+        },
+        card: {
+          DEFAULT: 'hsl(0, 0%, 100%)',
+          foreground: 'hsl(220, 9%, 14%)',
         },
       },
     },

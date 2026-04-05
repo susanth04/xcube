@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import ChatPanel from '@/components/chat-panel'
 import StatePanel from '@/components/state-panel'
 import SessionPanel from '@/components/session-panel'
@@ -20,37 +20,24 @@ interface SceneData {
   objects?: Record<string, SceneObject>
 }
 
-interface SimulationState {
-  fps: number
-  sceneData: SceneData
-}
-
 export default function Dashboard() {
-  const [sessionId] = useState(() => `session_${Date.now()}`)
+  const [sessionId, setSessionId] = useState('')
   const [apiStatus, setApiStatus] = useState<'online' | 'offline' | 'loading'>('loading')
-  const [simulationState, setSimulationState] = useState<SimulationState>({
-    fps: 60,
-    sceneData: {
-      current_scene: undefined,
-      robots: {},
-      objects: {},
-    },
+  const [sceneData, setSceneData] = useState<SceneData>({
+    current_scene: undefined,
+    robots: {},
+    objects: {},
   })
-  const canvasRef = useRef<HTMLDivElement>(null)
-  const frameCountRef = useRef(0)
-  const lastFrameTimeRef = useRef(Date.now())
+
+  useEffect(() => {
+    setSessionId(`session_${Date.now()}`)
+  }, [])
 
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const response = await fetch('http://localhost:8000/', {
-          mode: 'cors',
-        })
-        if (response.ok) {
-          setApiStatus('online')
-        } else {
-          setApiStatus('offline')
-        }
+        const response = await fetch('http://localhost:8000/', { mode: 'cors' })
+        setApiStatus(response.ok ? 'online' : 'offline')
       } catch {
         setApiStatus('offline')
       }
@@ -59,23 +46,6 @@ export default function Dashboard() {
     checkHealth()
     const interval = setInterval(checkHealth, 5000)
     return () => clearInterval(interval)
-  }, [])
-
-  // FPS counter
-  useEffect(() => {
-    const fpsInterval = setInterval(() => {
-      const now = Date.now()
-      const elapsed = now - lastFrameTimeRef.current
-      if (elapsed >= 1000) {
-        setSimulationState(prev => ({
-          ...prev,
-          fps: frameCountRef.current,
-        }))
-        frameCountRef.current = 0
-        lastFrameTimeRef.current = now
-      }
-    }, 100)
-    return () => clearInterval(fpsInterval)
   }, [])
 
   const handleSendMessage = async (message: string) => {
@@ -92,12 +62,8 @@ export default function Dashboard() {
 
       const data = await response.json()
       
-      // Update scene data from API response
       if (data.scene_state) {
-        setSimulationState(prev => ({
-          ...prev,
-          sceneData: data.scene_state,
-        }))
+        setSceneData(data.scene_state)
       }
       
       setApiStatus('online')
@@ -110,53 +76,34 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-background/95">
-      <div className="h-screen flex flex-col p-4 lg:p-6 gap-4 lg:gap-6">
+    <div className="min-h-screen bg-slate-50">
+      <div className="h-screen flex flex-col p-4 gap-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-baseline gap-3">
-            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">
-              Simulation
-            </h1>
-            <p className="text-sm text-muted-foreground font-medium tracking-wide">
-              Real-time 3D Environment
-            </p>
+            <h1 className="text-2xl font-bold text-slate-900">Simulation</h1>
+            <p className="text-sm text-slate-500">Real-time 3D Environment</p>
           </div>
-          <div className="text-xs text-muted-foreground font-mono">
-            {sessionId}
-          </div>
+          <div className="text-xs text-slate-400 font-mono" suppressHydrationWarning>{sessionId || 'loading...'}</div>
         </div>
 
         {/* Main Grid */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-h-0">
-          {/* 3D Canvas - Top Left */}
-          <div className="rounded-lg bg-white border border-border shadow-sm overflow-hidden dark:bg-slate-950">
-            <div ref={canvasRef} className="h-full w-full relative bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center">
-              <Scene3D sceneState={simulationState.sceneData} />
-              <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-sm px-2.5 py-1.5 rounded text-white font-mono text-xs">
-                {simulationState.fps} FPS
-              </div>
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0">
+          {/* 3D Canvas */}
+          <div className="rounded-lg bg-white border border-slate-200 shadow-sm overflow-hidden">
+            <div className="h-full w-full">
+              <Scene3D sceneState={sceneData} />
             </div>
           </div>
 
-          {/* Chat Panel - Top Right */}
-          <ChatPanel 
-            apiStatus={apiStatus} 
-            onSendMessage={handleSendMessage}
-          />
+          {/* Chat Panel */}
+          <ChatPanel apiStatus={apiStatus} onSendMessage={handleSendMessage} />
         </div>
 
         {/* Bottom Panels */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 h-1/3">
-          {/* State Panel - Bottom Left */}
-          <StatePanel sceneData={simulationState.sceneData} fps={simulationState.fps} />
-
-          {/* Session Panel - Bottom Right */}
-          <SessionPanel 
-            sessionId={sessionId} 
-            apiStatus={apiStatus}
-            onQuickCommand={handleSendMessage}
-          />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-64">
+          <StatePanel sceneData={sceneData} />
+          <SessionPanel sessionId={sessionId} apiStatus={apiStatus} onQuickCommand={handleSendMessage} />
         </div>
       </div>
     </div>
